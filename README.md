@@ -15,7 +15,7 @@ A comprehensive financial management solution tailored to meet the diverse needs
 1. Sign Up
 2. Set Up Your Budget
 3. Start Tracking
-4. Review Insights
+4. Get Generated Reports
 
 ## Requirements
 Running the program requireds the following dependencies:
