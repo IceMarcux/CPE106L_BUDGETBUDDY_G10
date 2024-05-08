@@ -1,141 +1,233 @@
-import json
+# import modules 
+from tkinter import *
+from tkinter import ttk
+import datetime as dt
+from mydb import *
+from tkinter import messagebox
 
-class BudgetTracker:
-    def __init__(self):
-        self.users = {}
+# object for database
+data = Database(db='test.db')
 
-    def register_user(self, username, password):
-        if username in self.users:
-            print("Username already exists. Please choose another one.")
-        else:
-            self.users[username] = {"password": password, "tracker": None}
-            print("User registered successfully.")
+# global variables
+count = 0
+selected_rowid = 0
 
-    def login_user(self, username, password):
-        if username in self.users and self.users[username]["password"] == password:
-            print("Login successful.")
-            return True
-        else:
-            print("Invalid username or password.")
-            return False
+# functions
+def saveRecord():
+    global data
+    data.insertRecord(item_name=item_name.get(), item_price=item_amt.get(), purchase_date=transaction_date.get())
+       
+def setDate():
+    date = dt.datetime.now()
+    dopvar.set(f'{date:%d %B %Y}')
 
-    def load_user_tracker(self, username):
-        if username in self.users and self.users[username]["tracker"]:
-            return self.users[username]["tracker"]
-        else:
-            print("No budget tracker found for this user.")
-            return None
+def clearEntries():
+    item_name.delete(0, 'end')
+    item_amt.delete(0, 'end')
+    transaction_date.delete(0, 'end')
 
-    def save_user_tracker(self, username, tracker):
-        if username in self.users:
-            self.users[username]["tracker"] = tracker
-            print("Budget tracker saved successfully.")
-        else:
-            print("User not found.")
+def fetch_records():
+    f = data.fetchRecord('select rowid, * from expense_record')
+    global count
+    for rec in f:
+        tv.insert(parent='', index='0', iid=count, values=(rec[0], rec[1], rec[2], rec[3]))
+        count += 1
+    tv.after(400, refreshData)
 
-    def add_expense(self, username, category, description, amount):
-        if username in self.users:
-            if self.users[username]["tracker"] is None:
-                self.users[username]["tracker"] = {"expenses": {}}
-            if category not in self.users[username]["tracker"]["expenses"]:
-                self.users[username]["tracker"]["expenses"][category] = []
-            self.users[username]["tracker"]["expenses"][category].append({"description": description, "amount": amount})
-            print("Expense added successfully.")
-        else:
-            print("User not found.")
+def select_record(event):
+    global selected_rowid
+    selected = tv.focus()    
+    val = tv.item(selected, 'values')
+  
+    try:
+        selected_rowid = val[0]
+        d = val[3]
+        namevar.set(val[1])
+        amtvar.set(val[2])
+        dopvar.set(str(d))
+    except Exception as ep:
+        pass
 
-    def view_expenses(self, username):
-        if username in self.users and self.users[username]["tracker"]:
-            expenses = self.users[username]["tracker"]["expenses"]
-            if not expenses:
-                print("No expenses recorded yet.")
-            else:
-                print("Expenses:")
-                for category, category_expenses in expenses.items():
-                    print(f"{category}:")
-                    for expense in category_expenses:
-                        print(f"  - {expense['description']}: ${expense['amount']}")
-        else:
-            print("No budget tracker found for this user.")
 
-    def total_expenses(self, username):
-        if username in self.users and self.users[username]["tracker"]:
-            expenses = self.users[username]["tracker"]["expenses"]
-            return sum(sum(expense['amount'] for expense in category_expenses) for category_expenses in expenses.values())
-        else:
-            print("No budget tracker found for this user.")
-            return 0
+def update_record():
+    global selected_rowid
 
-    def remaining_budget(self, username, monthly_budget):
-        if username in self.users and self.users[username]["tracker"]:
-            total_expenses = self.total_expenses(username)
-            return monthly_budget - total_expenses
-        else:
-            print("No budget tracker found for this user.")
-            return monthly_budget
+    selected = tv.focus()
+	# Update record
+    try:
+        data.updateRecord(namevar.get(), amtvar.get(), dopvar.get(), selected_rowid)
+        tv.item(selected, text="", values=(namevar.get(), amtvar.get(), dopvar.get()))
+    except Exception as ep:
+        messagebox.showerror('Error',  ep)
 
-    def save_users_data(self, filename="users.json"):
-        with open(filename, "w") as file:
-            json.dump(self.users, file)
+	# Clear entry boxes
+    item_name.delete(0, END)
+    item_amt.delete(0, END)
+    transaction_date.delete(0, END)
+    tv.after(400, refreshData)
+    
 
-    def load_users_data(self, filename="users.json"):
-        try:
-            with open(filename, "r") as file:
-                self.users = json.load(file)
-        except FileNotFoundError:
-            print("No user data found.")
+def totalBalance():
+    f = data.fetchRecord(query="Select sum(item_price) from expense_record")
+    for i in f:
+        for j in i:
+            messagebox.showinfo('Current Balance: ', f"Total Expense: ' {j} \nBalance Remaining: {5000 - j}")
 
-def main():
-    tracker = BudgetTracker()
-    tracker.load_users_data()
+def refreshData():
+    for item in tv.get_children():
+      tv.delete(item)
+    fetch_records()
+    
+def deleteRow():
+    global selected_rowid
+    data.removeRecord(selected_rowid)
+    refreshData()
 
-    while True:
-        print("\n1. Register")
-        print("2. Login")
-        print("3. Exit")
+# create tkinter object
+ws = Tk()
+ws.title('Daily Expenses')
 
-        choice = input("Enter your choice: ")
+# variables
+f = ('Times new roman', 14)
+namevar = StringVar()
+amtvar = IntVar()
+dopvar = StringVar()
 
-        if choice == "1":
-            username = input("Enter username: ")
-            password = input("Enter password: ")
-            tracker.register_user(username, password)
-        elif choice == "2":
-            username = input("Enter username: ")
-            password = input("Enter password: ")
-            if tracker.login_user(username, password):
-                while True:
-                    print("\n1. Add Expense")
-                    print("2. View Expenses")
-                    print("3. Total Expenses")
-                    print("4. Remaining Budget")
-                    print("5. Save and Logout")
-        
-                    user_choice = input("Enter your choice: ")
-        
-                    if user_choice == "1":
-                        category = input("Enter expense category: ")
-                        description = input("Enter expense description: ")
-                        amount = float(input("Enter expense amount: "))
-                        tracker.add_expense(username, category, description, amount)
-                    elif user_choice == "2":
-                        tracker.view_expenses(username)
-                    elif user_choice == "3":
-                        print(f"Total expenses: ${tracker.total_expenses(username)}")
-                    elif user_choice == "4":
-                        monthly_budget = float(input("Enter your monthly budget: "))
-                        print(f"Remaining budget: ${tracker.remaining_budget(username, monthly_budget)}")
-                    elif user_choice == "5":
-                        tracker.save_users_data()
-                        break
-                    else:
-                        print("Invalid choice. Please try again.")
-        elif choice == "3":
-            tracker.save_users_data()
-            print("Exiting...")
-            break
-        else:
-            print("Invalid choice. Please try again.")
+# Frame widget
+f2 = Frame(ws)
+f2.pack() 
 
-if __name__ == "__main__":
-    main()
+f1 = Frame(
+    ws,
+    padx=10,
+    pady=10,
+)
+f1.pack(expand=True, fill=BOTH)
+
+
+# Label widget
+Label(f1, text='ITEM NAME', font=f).grid(row=0, column=0, sticky=W)
+Label(f1, text='ITEM PRICE', font=f).grid(row=1, column=0, sticky=W)
+Label(f1, text='PURCHASE DATE', font=f).grid(row=2, column=0, sticky=W)
+
+# Entry widgets 
+item_name = Entry(f1, font=f, textvariable=namevar)
+item_amt = Entry(f1, font=f, textvariable=amtvar)
+transaction_date = Entry(f1, font=f, textvariable=dopvar)
+
+# Entry grid placement
+item_name.grid(row=0, column=1, sticky=EW, padx=(10, 0))
+item_amt.grid(row=1, column=1, sticky=EW, padx=(10, 0))
+transaction_date.grid(row=2, column=1, sticky=EW, padx=(10, 0))
+
+
+# Action buttons
+cur_date = Button(
+    f1, 
+    text='Current Date', 
+    font=f, 
+    bg='#04C4D9', 
+    command=setDate,
+    width=15
+    )
+
+submit_btn = Button(
+    f1, 
+    text='Save Record', 
+    font=f, 
+    command=saveRecord, 
+    bg='#42602D', 
+    fg='white'
+    )
+
+clr_btn = Button(
+    f1, 
+    text='Clear Entry', 
+    font=f, 
+    command=clearEntries, 
+    bg='#D9B036', 
+    fg='white'
+    )
+
+quit_btn = Button(
+    f1, 
+    text='Exit', 
+    font=f, 
+    command=lambda:ws.destroy(), 
+    bg='#D33532', 
+    fg='white'
+    )
+
+total_bal = Button(
+    f1,
+    text='Total Balance',
+    font=f,
+    bg='#486966',
+    command=totalBalance
+)
+
+total_spent = Button(
+    f1,
+    text='Total Spent',
+    font=f,
+    command=lambda:data.fetchRecord('select sum(ite)')
+)
+
+update_btn = Button(
+    f1, 
+    text='Update',
+    bg='#C2BB00',
+    command=update_record,
+    font=f
+)
+
+del_btn = Button(
+    f1, 
+    text='Delete',
+    bg='#BD2A2E',
+    command=deleteRow,
+    font=f
+)
+
+# grid placement
+cur_date.grid(row=3, column=1, sticky=EW, padx=(10, 0))
+submit_btn.grid(row=0, column=2, sticky=EW, padx=(10, 0))
+clr_btn.grid(row=1, column=2, sticky=EW, padx=(10, 0))
+quit_btn.grid(row=2, column=2, sticky=EW, padx=(10, 0))
+total_bal.grid(row=0, column=3, sticky=EW, padx=(10, 0))
+update_btn.grid(row=1, column=3, sticky=EW, padx=(10, 0))
+del_btn.grid(row=2, column=3, sticky=EW, padx=(10, 0))
+
+# Treeview widget
+tv = ttk.Treeview(f2, columns=(1, 2, 3, 4), show='headings', height=8)
+tv.pack(side="left")
+
+# add heading to treeview
+tv.column(1, anchor=CENTER, stretch=NO, width=70)
+tv.column(2, anchor=CENTER)
+tv.column(3, anchor=CENTER)
+tv.column(4, anchor=CENTER)
+tv.heading(1, text="Serial no")
+tv.heading(2, text="Item Name", )
+tv.heading(3, text="Item Price")
+tv.heading(4, text="Purchase Date")
+
+# binding treeview
+tv.bind("<ButtonRelease-1>", select_record)
+
+# style for treeview
+style = ttk.Style()
+style.theme_use("default")
+style.map("Treeview")
+
+# Vertical scrollbar
+scrollbar = Scrollbar(f2, orient='vertical')
+scrollbar.configure(command=tv.yview)
+scrollbar.pack(side="right", fill="y")
+tv.config(yscrollcommand=scrollbar.set)
+
+# calling function 
+fetch_records()
+
+# infinite loop
+ws.mainloop()
